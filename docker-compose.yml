@@ -1,0 +1,28 @@
+version: "3"
+
+services:
+
+  kafka:
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    environment:
+      JMX_PORT: 9999
+      KAFKA_ADVERTISED_HOST_NAME: kafka
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+    image: wurstmeister/kafka:2.11-2.0.1
+    restart: unless-stopped
+
+  kafka-proxy:
+    container_name: kafka-proxy
+    build: .
+    ports:
+      - 9092:9092
+    environment:
+      ADDRESS: 0.0.0.0:9092
+      BROKER: kafka:9092
+
+  zookeeper:
+    container_name: zookeeper
+    image: zookeeper:3.6.1
+    restart: unless-stopped
