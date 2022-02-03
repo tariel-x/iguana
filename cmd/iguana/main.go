@@ -8,7 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/tariel-x/kype/internal/proxy"
+	"github.com/tariel-x/iguana/internal/proxy"
 	"github.com/urfave/cli/v2"
 )
 

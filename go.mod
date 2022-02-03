@@ -1,4 +1,4 @@
-module github.com/tariel-x/kype
+module github.com/tariel-x/iguana
 
 go 1.16
 
