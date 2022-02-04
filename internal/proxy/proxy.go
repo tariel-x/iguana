@@ -9,7 +9,8 @@ import (
 	"io"
 	"log"
 	"net"
-	"strconv"
+
+	"github.com/tariel-x/iguana/internal/parser"
 )
 
 type Proxy struct {
@@ -94,16 +95,14 @@ func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages chan []byte,
 			return err
 		}
 
-		cmd, err := apiKey(proxymessage[4:6])
+		_, cmd, err := parser.GetRequest(proxymessage[4:6])
 		if err != nil {
 			return err
 		}
 		if isclient {
 			log.Println("From client:", len(proxymessage), "bytes, cmd: ", cmd)
-			log.Println("From client:", proxymessage)
 		} else {
 			log.Println("To client:", len(proxymessage), "bytes, cmd: ", cmd)
-			log.Println("To client:", proxymessage)
 		}
 
 		messages <- proxymessage
@@ -139,32 +138,4 @@ func readMessage(conn io.Reader) ([]byte, error) {
 	proxymessage := make([]byte, int(size))
 	_, err = io.ReadAtLeast(conn, proxymessage, int(size))
 	return append(sizeBytes, proxymessage...), nil
-}
-
-func apiKey(b []byte) (string, error) {
-	keys := map[int16]string{
-		0:  "ProduceRequest",
-		1:  "FetchRequest",
-		2:  "OffsetRequest",
-		3:  "MetadataRequest",
-		8:  "OffsetCommitRequest",
-		9:  "OffsetFetchRequest",
-		10: "GroupCoordinatorRequest",
-		11: "JoinGroupRequest",
-		12: "HeartbeatRequest",
-		13: "LeaveGroupRequest",
-		14: "SyncGroupRequest",
-		15: "DescribeGroupsRequest",
-		16: "ListGroupsRequest",
-		18: "ApiVersions",
-	}
-	var intKey int16
-	buf := bytes.NewReader(b)
-	if err := binary.Read(buf, binary.BigEndian, &intKey); err != nil {
-		return "", err
-	}
-	if stringKey, ok := keys[intKey]; ok {
-		return stringKey, nil
-	}
-	return strconv.Itoa(int(intKey)), nil
 }
