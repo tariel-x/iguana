@@ -70,77 +70,104 @@ func (p *Proxy) Start(ctx context.Context) error {
 }
 
 func (p *Proxy) handle(ctx context.Context, conn net.Conn) {
+	defer func() {
+		if err := conn.Close(); err != nil {
+			log.Println("ERROR CLOSING", err)
+		}
+	}()
+
 	brokerConn, err := net.Dial("tcp", p.broker)
 	if err != nil {
 		log.Println(err)
 		return
 	}
 
+	defer func() {
+		if err := brokerConn.Close(); err != nil {
+			log.Println("ERROR CLOSING", err)
+		}
+	}()
+
 	proxymessages := make(chan []byte, 1000)
 	toparse := make(chan []byte, 1000)
 	returnmessages := make(chan []byte, 1000)
+	errch := make(chan error, 10000)
+
+	pipectx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	// client to broker
-	go p.listen(ctx, conn, proxymessages, toparse)
-	go p.parse(ctx, toparse)
-	go p.redirect(ctx, brokerConn, proxymessages)
+	go p.listen(pipectx, conn, toparse, errch)
+	go p.parse(pipectx, toparse, proxymessages, errch)
+	go p.redirect(pipectx, proxymessages, brokerConn, errch)
 
 	// broker to client
-	go p.listen(ctx, brokerConn, returnmessages, nil)
-	go p.redirect(ctx, conn, returnmessages)
+	go p.listen(pipectx, brokerConn, returnmessages, errch)
+	go p.redirect(pipectx, returnmessages, conn, errch)
+
+	select {
+	case <-ctx.Done():
+		return
+	case err := <-errch:
+		log.Println("ERROR", err)
+		return
+	}
 }
 
-func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages, toparse chan []byte) error {
+func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages chan []byte, errch chan error) {
 	for {
 		proxymessage, err := readMessage(conn)
 		if err != nil {
-			return err
+			errch <- err
+			return
 		}
 
 		_, cmd, err := parser.GetRequest(proxymessage)
 		if err != nil {
-			return err
+			errch <- err
+			return
 		}
-		if toparse != nil {
-			log.Println("From client:", len(proxymessage), "bytes, cmd: ", cmd)
-			toparse <- proxymessage
-		} else {
-			log.Println("To client:", len(proxymessage), "bytes, cmd: ", cmd)
-		}
+
+		log.Println("from", conn.RemoteAddr(), len(proxymessage), "bytes, cmd: ", cmd)
 
 		messages <- proxymessage
 	}
 }
 
-func (p *Proxy) redirect(ctx context.Context, conn net.Conn, messages chan []byte) error {
+func (p *Proxy) redirect(ctx context.Context, messages chan []byte, conn net.Conn, errch chan error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return
 		case msg := <-messages:
 			if _, err := conn.Write(msg); err != nil {
-				return err
+				errch <- err
+				return
 			}
 		}
 	}
 }
 
-func (p *Proxy) parse(ctx context.Context, messages chan []byte) error {
+func (p *Proxy) parse(ctx context.Context, toparse, messages chan []byte, errch chan error) {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
-		case msg := <-messages:
+			return
+		case msg := <-toparse:
 			cmdID, _, err := parser.GetRequest(msg)
 			if err != nil {
-				return err
+				errch <- err
+				return
 			}
 			if cmdID != parser.CodeProduceRequest {
+				messages <- msg
 				continue
 			}
 			if err := p.parseProduce(msg); err != nil {
-				return err
+				errch <- err
+				return
 			}
+			messages <- msg
 		}
 	}
 }
