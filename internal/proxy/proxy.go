@@ -77,30 +77,33 @@ func (p *Proxy) handle(ctx context.Context, conn net.Conn) {
 	}
 
 	proxymessages := make(chan []byte, 1000)
+	toparse := make(chan []byte, 1000)
 	returnmessages := make(chan []byte, 1000)
 
-	// proxy to broker
-	go p.listen(ctx, conn, proxymessages, true)
+	// client to broker
+	go p.listen(ctx, conn, proxymessages, toparse)
+	go p.parse(ctx, toparse)
 	go p.redirect(ctx, brokerConn, proxymessages)
 
-	// proxy to client
-	go p.listen(ctx, brokerConn, returnmessages, false)
+	// broker to client
+	go p.listen(ctx, brokerConn, returnmessages, nil)
 	go p.redirect(ctx, conn, returnmessages)
 }
 
-func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages chan []byte, isclient bool) error {
+func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages, toparse chan []byte) error {
 	for {
 		proxymessage, err := readMessage(conn)
 		if err != nil {
 			return err
 		}
 
-		_, cmd, err := parser.GetRequest(proxymessage[4:6])
+		_, cmd, err := parser.GetRequest(proxymessage)
 		if err != nil {
 			return err
 		}
-		if isclient {
+		if toparse != nil {
 			log.Println("From client:", len(proxymessage), "bytes, cmd: ", cmd)
+			toparse <- proxymessage
 		} else {
 			log.Println("To client:", len(proxymessage), "bytes, cmd: ", cmd)
 		}
@@ -120,6 +123,41 @@ func (p *Proxy) redirect(ctx context.Context, conn net.Conn, messages chan []byt
 			}
 		}
 	}
+}
+
+func (p *Proxy) parse(ctx context.Context, messages chan []byte) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case msg := <-messages:
+			cmdID, _, err := parser.GetRequest(msg)
+			if err != nil {
+				return err
+			}
+			if cmdID != parser.CodeProduceRequest {
+				continue
+			}
+			if err := p.parseProduce(msg); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+func (p *Proxy) parseProduce(data []byte) error {
+	req, err := (&parser.ProduceRequestParser{}).Parse(data)
+	if err != nil {
+		return err
+	}
+	for _, topic := range req.Topics {
+		for _, partition := range topic.Partitions {
+			for _, record := range partition.RecordBatch.Records {
+				log.Printf("PRODUCE %s PARTITION %d HEADERS %s KEY %s VALUE %s\n", topic.TopicName, partition.Partition, record.Headers, record.Key, record.Value)
+			}
+		}
+	}
+	return nil
 }
 
 func readMessage(conn io.Reader) ([]byte, error) {

@@ -45,7 +45,7 @@ var RequestNames = map[int]string{
 
 func GetRequest(b []byte) (int, string, error) {
 	var intKey int16
-	buf := bytes.NewReader(b)
+	buf := bytes.NewReader(b[4:6])
 	if err := binary.Read(buf, binary.BigEndian, &intKey); err != nil {
 		return 0, "", err
 	}

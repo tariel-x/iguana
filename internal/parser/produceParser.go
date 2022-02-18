@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type ProduceRequest struct {
@@ -49,7 +50,17 @@ type Record struct {
 	OffsetDelta    int64 //varint
 	Key            []byte
 	Value          []byte
-	Headers        []Header
+	Headers        HeaderSet
+}
+
+type HeaderSet []Header
+
+func (s HeaderSet) String() string {
+	parts := make([]string, 0, len(s))
+	for _, header := range s {
+		parts = append(parts, fmt.Sprintf("%s:%s", header.HeaderKey, header.HeaderValue))
+	}
+	return strings.Join(parts, ";")
 }
 
 type Header struct {
