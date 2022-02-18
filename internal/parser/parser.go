@@ -57,7 +57,7 @@ func GetRequest(b []byte) (int, string, error) {
 
 type decodeElementFunc func(data []byte) (int, interface{}, error)
 
-func decodeArray(data []byte, target interface{}, decodeElement decodeElementFunc) (int, error) {
+func decodeArray(data []byte, target interface{}, decodeElement decodeElementFunc, varint bool) (int, error) {
 	valuePtr := reflect.ValueOf(target)
 	if reflect.TypeOf(target).Kind() != reflect.Ptr || valuePtr.IsNil() {
 		return 0, errors.New("target must be a non-nil pointer")
@@ -68,10 +68,19 @@ func decodeArray(data []byte, target interface{}, decodeElement decodeElementFun
 
 	offset := 0
 	var arraySize int32
-	if err := decode(data[offset:offset+4], &arraySize); err != nil {
-		return 0, err
+	if !varint {
+		if err := decode(data[offset:offset+4], &arraySize); err != nil {
+			return 0, err
+		}
+		offset += 4
+	} else {
+		length, read := binary.Varint(data[offset:])
+		if read == 0 {
+			return 0, errors.New("not varint")
+		}
+		offset += int(read)
+		arraySize = int32(length)
 	}
-	offset = offset + 4
 
 	value := valuePtr.Elem()
 
@@ -211,7 +220,7 @@ func (p *ProduceRequestParser) Parse(data []byte) (*ProduceRequest, error) {
 	offset += 8
 
 	var topics []ProduceRequestTopic
-	read, err = decodeArray(data[offset:], &topics, p.parseTopic)
+	read, err = decodeArray(data[offset:], &topics, p.parseTopic, false)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +246,7 @@ func (p *ProduceRequestParser) parseTopic(data []byte) (int, interface{}, error)
 	offset += read
 
 	var partitions []ProduceRequestPartition
-	read, err = decodeArray(data[offset:], &partitions, p.parsePartition)
+	read, err = decodeArray(data[offset:], &partitions, p.parsePartition, false)
 	if err != nil {
 		return 0, ProduceRequestTopic{}, err
 	}
@@ -298,7 +307,7 @@ func (p *ProduceRequestParser) parseRecordBatch(data []byte) (int, RecordBatch, 
 	offset += 57
 
 	var records []Record
-	read, err := decodeArray(data[offset:], &records, p.parseRecord)
+	read, err := decodeArray(data[offset:], &records, p.parseRecord, false)
 	if err != nil {
 		return 0, RecordBatch{}, err
 	}
@@ -362,7 +371,7 @@ func (p *ProduceRequestParser) parseRecord(data []byte) (int, interface{}, error
 	offset += read
 
 	var headers []Header
-	read, err = decodeArray(data[offset:], &headers, p.parseHeader)
+	read, err = decodeArray(data[offset:], &headers, p.parseHeader, true)
 	if err != nil {
 		return 0, nil, err
 	}
