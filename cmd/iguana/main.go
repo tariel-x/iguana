@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/tariel-x/iguana/internal/proxy"
+	"github.com/tariel-x/iguana/internal/validator"
 	"github.com/urfave/cli/v2"
 )
 
@@ -25,6 +26,11 @@ func main() {
 				Value:   "localhost:9093",
 				EnvVars: []string{"BROKER"},
 			},
+			&cli.StringFlag{
+				Name:    "sr",
+				Value:   "localhost:8081",
+				EnvVars: []string{"SCHEMA_REGISTRY"},
+			},
 		},
 		Action: listen,
 	}
@@ -38,10 +44,14 @@ func main() {
 func listen(c *cli.Context) error {
 	address := c.String("address")
 	broker := c.String("broker")
-	p, err := proxy.NewProxy(address, broker)
+	sr := c.String("sr")
+
+	v := validator.New(sr)
+	p, err := proxy.NewProxy(address, broker, v)
 	if err != nil {
 		return err
 	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {

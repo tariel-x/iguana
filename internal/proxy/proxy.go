@@ -13,17 +13,25 @@ import (
 	"github.com/tariel-x/iguana/internal/parser"
 )
 
+type Validator interface {
+	Validate(context.Context, []byte, string, int) (bool, error)
+}
+
 type Proxy struct {
-	address string
-	broker  string
+	address   string
+	broker    string
+	validator Validator
 }
 
 const defaultAddress = ":9092"
 
 var ErrNoBroker = errors.New("no broker is set")
 
-func NewProxy(address string, broker string) (*Proxy, error) {
-	p := Proxy{address: defaultAddress}
+func NewProxy(address string, broker string, validator Validator) (*Proxy, error) {
+	p := Proxy{
+		address:   defaultAddress,
+		validator: validator,
+	}
 	if address != "" {
 		p.address = address
 	}
@@ -163,7 +171,7 @@ func (p *Proxy) parse(ctx context.Context, toparse, messages chan []byte, errch 
 				messages <- msg
 				continue
 			}
-			if err := p.parseProduce(msg); err != nil {
+			if err := p.parseProduce(ctx, msg); err != nil {
 				errch <- err
 				return
 			}
@@ -172,7 +180,7 @@ func (p *Proxy) parse(ctx context.Context, toparse, messages chan []byte, errch 
 	}
 }
 
-func (p *Proxy) parseProduce(data []byte) error {
+func (p *Proxy) parseProduce(ctx context.Context, data []byte) error {
 	req, err := (&parser.ProduceRequestParser{}).Parse(data)
 	if err != nil {
 		return err
@@ -181,10 +189,27 @@ func (p *Proxy) parseProduce(data []byte) error {
 		for _, partition := range topic.Partitions {
 			for _, record := range partition.RecordBatch.Records {
 				log.Printf("PRODUCE %s PARTITION %d HEADERS %s KEY %s VALUE %s\n", topic.TopicName, partition.Partition, record.Headers, record.Key, record.Value)
+				valid, err := p.validateMessage(ctx, topic.TopicName, record.Value)
+				if err != nil {
+					return err
+				}
+				if !valid {
+					log.Println("NOT VALID")
+					//TODO: return messages batch
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func (p *Proxy) validateMessage(ctx context.Context, topic string, message []byte) (bool, error) {
+	rawSchemaID := binary.BigEndian.Uint32(message[1:5])
+	schemaID := 0
+	if rawSchemaID > 0 {
+		schemaID = int(rawSchemaID)
+	}
+	return p.validator.Validate(ctx, message, topic, schemaID)
 }
 
 func readMessage(conn io.Reader) ([]byte, error) {
