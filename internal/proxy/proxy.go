@@ -54,7 +54,7 @@ func (p *Proxy) Start(ctx context.Context) error {
 
 	go func() {
 		for {
-			// Открываем порт
+			// Listen for connections
 			conn, err := ln.Accept()
 			if err != nil {
 				errs <- fmt.Errorf("can not listen: %w", err)
@@ -84,6 +84,7 @@ func (p *Proxy) handle(ctx context.Context, conn net.Conn) {
 		}
 	}()
 
+	// Connect to the broker
 	brokerConn, err := net.Dial("tcp", p.broker)
 	if err != nil {
 		log.Println(err)
@@ -104,12 +105,12 @@ func (p *Proxy) handle(ctx context.Context, conn net.Conn) {
 	pipectx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// client to broker
+	// Client to broker pipeline: read, parse, redirect
 	go p.listen(pipectx, conn, toparse, errch)
-	go p.parse(pipectx, toparse, proxymessages, errch)
+	go p.parse(pipectx, toparse, proxymessages, returnmessages, errch)
 	go p.redirect(pipectx, proxymessages, brokerConn, errch)
 
-	// broker to client
+	// Broker to client pipeline: read, redirect
 	go p.listen(pipectx, brokerConn, returnmessages, errch)
 	go p.redirect(pipectx, returnmessages, conn, errch)
 
@@ -156,23 +157,41 @@ func (p *Proxy) redirect(ctx context.Context, messages chan []byte, conn net.Con
 	}
 }
 
-func (p *Proxy) parse(ctx context.Context, toparse, messages chan []byte, errch chan error) {
+func (p *Proxy) parse(ctx context.Context, toparse, messages, returnmessages chan []byte, errch chan error) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case msg := <-toparse:
+			// Get request code
 			cmdID, _, err := parser.GetRequest(msg)
 			if err != nil {
 				errch <- err
 				return
 			}
+			// If not produce -- redirect
 			if cmdID != parser.CodeProduceRequest {
 				messages <- msg
 				continue
 			}
-			if err := p.parseProduce(ctx, msg); err != nil {
+			// Parse produce request
+			req, err := p.parseProduce(msg)
+			if err != nil {
 				errch <- err
+				return
+			}
+			validationErr, err := p.validate(ctx, req)
+			if err != nil {
+				errch <- err
+				return
+			}
+			if validationErr != nil {
+				refuseMsg, err := p.getRefuseMessage(*validationErr)
+				if err != nil {
+					errch <- err
+					return
+				}
+				returnmessages <- refuseMsg
 				return
 			}
 			messages <- msg
@@ -180,36 +199,62 @@ func (p *Proxy) parse(ctx context.Context, toparse, messages chan []byte, errch 
 	}
 }
 
-func (p *Proxy) parseProduce(ctx context.Context, data []byte) error {
-	req, err := (&parser.ProduceRequestParser{}).Parse(data)
-	if err != nil {
-		return err
-	}
+var ErrRecordNotValid = errors.New("record not valid")
+
+type validationError struct {
+	topic     string
+	partition int32
+	offset    int64
+	err       error
+}
+
+func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*validationError, error) {
 	for _, topic := range req.Topics {
 		for _, partition := range topic.Partitions {
 			for _, record := range partition.RecordBatch.Records {
 				log.Printf("PRODUCE %s PARTITION %d HEADERS %s KEY %s VALUE %s\n", topic.TopicName, partition.Partition, record.Headers, record.Key, record.Value)
-				valid, err := p.validateMessage(ctx, topic.TopicName, record.Value)
+				valid, err := p.validatePayload(ctx, topic.TopicName, record.Value)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				if !valid {
-					log.Println("NOT VALID")
-					//TODO: return messages batch
+					return &validationError{
+						topic:     topic.TopicName,
+						partition: partition.Partition,
+						offset:    partition.RecordBatch.FirstOffset,
+						err:       ErrRecordNotValid,
+					}, nil
 				}
 			}
 		}
 	}
-	return nil
+
+	return nil, nil
 }
 
-func (p *Proxy) validateMessage(ctx context.Context, topic string, message []byte) (bool, error) {
+func (p *Proxy) validatePayload(ctx context.Context, topic string, message []byte) (bool, error) {
 	rawSchemaID := binary.BigEndian.Uint32(message[1:5])
 	schemaID := 0
 	if rawSchemaID > 0 {
 		schemaID = int(rawSchemaID)
 	}
 	return p.validator.Validate(ctx, message, topic, schemaID)
+}
+
+func (p *Proxy) parseProduce(data []byte) (*parser.ProduceRequest, error) {
+	req, err := (&parser.ProduceRequestParser{}).Parse(data)
+	return req, err
+}
+
+func (p *Proxy) getRefuseMessage(validationErr validationError) ([]byte, error) {
+	s := parser.ProduceResponseSerializer{}
+	resp := parser.ProduceResponse{
+		Topic:     validationErr.topic,
+		Partition: validationErr.partition,
+		ErrorCode: parser.ErrorInvalidRecord,
+		Offset:    validationErr.offset,
+	}
+	return s.Serialize(resp)
 }
 
 func readMessage(conn io.Reader) ([]byte, error) {
