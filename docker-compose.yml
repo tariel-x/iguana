@@ -26,3 +26,17 @@ services:
     container_name: zookeeper
     image: zookeeper:3.6.1
     restart: unless-stopped
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.0.0
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
