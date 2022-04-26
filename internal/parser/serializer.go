@@ -38,6 +38,10 @@ func (s ProduceResponseSerializer) Serialize(resp ProduceResponse) ([]byte, erro
 		return nil, fmt.Errorf("can not write correlation id: %w", err)
 	}
 
+	if err := binary.Write(payloadBuffer, binary.BigEndian, int16(len([]byte(resp.Topic)))); err != nil {
+		return nil, fmt.Errorf("can not write topic length: %w", err)
+	}
+
 	if err := binary.Write(payloadBuffer, binary.BigEndian, []byte(resp.Topic)); err != nil {
 		return nil, fmt.Errorf("can not write topic: %w", err)
 	}
