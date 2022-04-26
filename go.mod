@@ -3,6 +3,7 @@ module github.com/tariel-x/iguana
 go 1.16
 
 require (
+	github.com/Shopify/sarama v1.32.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.1 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/linkedin/goavro/v2 v2.11.0 // indirect
