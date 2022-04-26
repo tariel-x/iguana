@@ -218,6 +218,7 @@ func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*vali
 					return nil, err
 				}
 				if !valid {
+					log.Printf("RETURN RECORD NOT VALID FOR PRODUCE TO TOPIC %s PARTITION %d\n", topic.TopicName, partition.Partition)
 					return &validationError{
 						topic:     topic.TopicName,
 						partition: partition.Partition,
