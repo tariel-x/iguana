@@ -202,10 +202,11 @@ func (p *Proxy) parse(ctx context.Context, toparse, messages, returnmessages cha
 var ErrRecordNotValid = errors.New("record not valid")
 
 type validationError struct {
-	topic     string
-	partition int32
-	offset    int64
-	err       error
+	topic         string
+	correlationId int32
+	partition     int32
+	offset        int64
+	err           error
 }
 
 func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*validationError, error) {
@@ -220,10 +221,11 @@ func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*vali
 				if !valid {
 					log.Printf("RETURN RECORD NOT VALID FOR PRODUCE TO TOPIC %s PARTITION %d\n", topic.TopicName, partition.Partition)
 					return &validationError{
-						topic:     topic.TopicName,
-						partition: partition.Partition,
-						offset:    partition.RecordBatch.FirstOffset,
-						err:       ErrRecordNotValid,
+						topic:         topic.TopicName,
+						correlationId: req.CorrelationId,
+						partition:     partition.Partition,
+						offset:        partition.RecordBatch.FirstOffset,
+						err:           ErrRecordNotValid,
 					}, nil
 				}
 			}
@@ -254,10 +256,11 @@ func (p *Proxy) parseProduce(data []byte) (*parser.ProduceRequest, error) {
 func (p *Proxy) getRefuseMessage(validationErr validationError) ([]byte, error) {
 	s := parser.ProduceResponseSerializer{}
 	resp := parser.ProduceResponse{
-		Topic:     validationErr.topic,
-		Partition: validationErr.partition,
-		ErrorCode: parser.ErrorInvalidRecord,
-		Offset:    validationErr.offset,
+		Topic:         validationErr.topic,
+		CorrelationID: validationErr.correlationId,
+		Partition:     validationErr.partition,
+		ErrorCode:     parser.ErrorInvalidRecord,
+		Offset:        validationErr.offset,
 	}
 	return s.Serialize(resp)
 }
