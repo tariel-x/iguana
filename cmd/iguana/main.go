@@ -28,7 +28,7 @@ func main() {
 			},
 			&cli.StringFlag{
 				Name:    "sr",
-				Value:   "localhost:8081",
+				Value:   "http://localhost:8081",
 				EnvVars: []string{"SCHEMA_REGISTRY"},
 			},
 		},

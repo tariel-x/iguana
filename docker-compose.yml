@@ -21,6 +21,7 @@ services:
     environment:
       ADDRESS: 0.0.0.0:9092
       BROKER: kafka:9092
+      SCHEMA_REGISTRY: http://sr:8081
 
   zookeeper:
     container_name: zookeeper
@@ -29,7 +30,7 @@ services:
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.0.0
-    hostname: schema-registry
+    hostname: sr
     container_name: schema-registry
     depends_on:
       - kafka

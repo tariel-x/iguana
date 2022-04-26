@@ -233,11 +233,15 @@ func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*vali
 }
 
 func (p *Proxy) validatePayload(ctx context.Context, topic string, message []byte) (bool, error) {
+	if len(message) <= 4 {
+		return true, nil
+	}
 	rawSchemaID := binary.BigEndian.Uint32(message[0:4])
 	schemaID := 0
 	if rawSchemaID > 0 {
 		schemaID = int(rawSchemaID)
 	}
+
 	return p.validator.Validate(ctx, message[4:], topic, schemaID)
 }
 
