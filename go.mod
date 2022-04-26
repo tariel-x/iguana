@@ -9,5 +9,7 @@ require (
 	github.com/riferrei/srclient v0.4.0 // indirect
 	github.com/stretchr/testify v1.7.0 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
+	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
+	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c // indirect
 )

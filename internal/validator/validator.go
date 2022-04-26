@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/riferrei/srclient"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 type Validator struct {
@@ -36,7 +37,9 @@ func (v *Validator) Validate(ctx context.Context, msg []byte, topic string, sche
 }
 
 func (v *Validator) validate(ctx context.Context, msg []byte, schema srclient.Schema) (bool, error) {
-	//TODO: Make validation for protobuf
-	//hardcode validation for protobuf
-	return false, nil
+	result, err := gojsonschema.Validate(gojsonschema.NewStringLoader(schema.Schema()), gojsonschema.NewBytesLoader(msg))
+	if err != nil {
+		return false, fmt.Errorf("can not validate: %w", err)
+	}
+	return result.Valid(), nil
 }
