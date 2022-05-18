@@ -21,6 +21,7 @@ type ProduceResponse struct {
 type ProduceResponseSerializer struct {
 }
 
+//TODO support other versions except V3
 func (s ProduceResponseSerializer) Serialize(resp ProduceResponse) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 	var err error
