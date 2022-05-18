@@ -2,8 +2,10 @@ package validator
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/riferrei/srclient"
+	"github.com/xeipuuv/gojsonschema"
 )
 
 type Validator struct {
@@ -25,13 +27,19 @@ func (v *Validator) Validate(ctx context.Context, msg []byte, topic string, sche
 		return v.validate(ctx, msg, schema)
 	}
 
-	//TODO: load scheme from registry
+	registrySchema, err := v.client.GetSchema(schemaID)
+	if err != nil {
+		return false, fmt.Errorf("can not load scheme from registry: %w", err)
+	}
+	v.schemas[schemaID] = *registrySchema
 
-	return false, nil
+	return v.validate(ctx, msg, v.schemas[schemaID])
 }
 
 func (v *Validator) validate(ctx context.Context, msg []byte, schema srclient.Schema) (bool, error) {
-	//TODO: Make validation for protobuf
-
-	return false, nil
+	result, err := gojsonschema.Validate(gojsonschema.NewStringLoader(schema.Schema()), gojsonschema.NewBytesLoader(msg))
+	if err != nil {
+		return false, fmt.Errorf("can not validate: %w", err)
+	}
+	return result.Valid(), nil
 }

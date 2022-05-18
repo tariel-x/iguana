@@ -6,6 +6,8 @@ services:
     container_name: kafka
     depends_on:
       - zookeeper
+#    ports:
+#      - 9092:9092
     environment:
       JMX_PORT: 9999
       KAFKA_ADVERTISED_HOST_NAME: kafka
@@ -21,8 +23,23 @@ services:
     environment:
       ADDRESS: 0.0.0.0:9092
       BROKER: kafka:9092
+      SCHEMA_REGISTRY: http://sr:8081
 
   zookeeper:
     container_name: zookeeper
     image: zookeeper:3.6.1
     restart: unless-stopped
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.0.0
+    hostname: sr
+    container_name: schema-registry
+    depends_on:
+      - kafka
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'kafka:9092'
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
