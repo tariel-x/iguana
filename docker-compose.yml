@@ -6,6 +6,8 @@ services:
     container_name: kafka
     depends_on:
       - zookeeper
+#    ports:
+#      - 9092:9092
     environment:
       JMX_PORT: 9999
       KAFKA_ADVERTISED_HOST_NAME: kafka
