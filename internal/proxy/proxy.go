@@ -10,7 +10,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/tariel-x/iguana/internal/parser"
+	"github.com/tariel-x/iguana/internal/protocol"
 )
 
 type Validator interface {
@@ -131,7 +131,7 @@ func (p *Proxy) listen(ctx context.Context, conn net.Conn, messages chan []byte,
 			return
 		}
 
-		_, cmd, err := parser.GetRequest(proxymessage)
+		_, cmd, err := protocol.GetRequest(proxymessage)
 		if err != nil {
 			errch <- err
 			return
@@ -164,13 +164,13 @@ func (p *Proxy) parse(ctx context.Context, toparse, messages, returnmessages cha
 			return
 		case msg := <-toparse:
 			// Get request code
-			cmdID, _, err := parser.GetRequest(msg)
+			cmdID, _, err := protocol.GetRequest(msg)
 			if err != nil {
 				errch <- err
 				return
 			}
 			// If not produce -- redirect
-			if cmdID != parser.CodeProduceRequest {
+			if cmdID != protocol.CodeProduceRequest {
 				messages <- msg
 				continue
 			}
@@ -209,7 +209,7 @@ type validationError struct {
 	err           error
 }
 
-func (p *Proxy) validate(ctx context.Context, req *parser.ProduceRequest) (*validationError, error) {
+func (p *Proxy) validate(ctx context.Context, req *protocol.ProduceRequest) (*validationError, error) {
 	for _, topic := range req.Topics {
 		for _, partition := range topic.Partitions {
 			for _, record := range partition.RecordBatch.Records {
@@ -248,18 +248,18 @@ func (p *Proxy) validatePayload(ctx context.Context, topic string, message []byt
 	return p.validator.Validate(ctx, message[4:], topic, schemaID)
 }
 
-func (p *Proxy) parseProduce(data []byte) (*parser.ProduceRequest, error) {
-	req, err := (&parser.ProduceRequestParser{}).Parse(data)
+func (p *Proxy) parseProduce(data []byte) (*protocol.ProduceRequest, error) {
+	req, err := (&protocol.ProduceRequestParser{}).Parse(data)
 	return req, err
 }
 
 func (p *Proxy) getRefuseMessage(validationErr validationError) ([]byte, error) {
-	s := parser.ProduceResponseSerializer{}
-	resp := parser.ProduceResponse{
+	s := protocol.ProduceResponseSerializer{}
+	resp := protocol.ProduceResponse{
 		Topic:         validationErr.topic,
 		CorrelationID: validationErr.correlationId,
 		Partition:     validationErr.partition,
-		ErrorCode:     parser.ErrorInvalidRecord,
+		ErrorCode:     protocol.ErrorInvalidRecord,
 		Offset:        validationErr.offset,
 	}
 	return s.Serialize(resp)

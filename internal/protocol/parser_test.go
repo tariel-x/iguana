@@ -1,4 +1,4 @@
-package parser
+package protocol
 
 import (
 	"io"
@@ -19,7 +19,7 @@ func TestParseRequest(t *testing.T) {
 	}
 
 	parser := &ProduceRequestParser{}
-	req, err := parser.Parse(data)
+	req, err := protocol.Parse(data)
 	if err != nil {
 		t.Errorf("can not parse data: %s", err)
 	}
@@ -92,7 +92,7 @@ func TestParseRequest2(t *testing.T) {
 	}
 
 	parser := &ProduceRequestParser{}
-	req, err := parser.Parse(data)
+	req, err := protocol.Parse(data)
 	if err != nil {
 		t.Errorf("can not parse data: %s", err)
 	}
