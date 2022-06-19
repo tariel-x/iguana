@@ -89,8 +89,23 @@ type FieldArray struct {
 	//DecodeSize    decodeSizeFunc
 }
 
-//TODO: fill logic in array decode
+//TODO: здесь каждый раз данные будут заполняться в одну и ту же структуру Fields Message, надо исправить
 func (s *FieldArray) Decode(data []byte) (int, error) {
+	offset := 0
+	var arraySize int32
+	if err := decode(data[offset:4], &arraySize); err != nil {
+		return 0, err
+	}
+	offset += 4
+
+	for i := 0; i < int(arraySize); i++ {
+		delta, err := s.Fields.Decode(data[offset:])
+		if err != nil {
+			return offset, err
+		}
+		offset += delta
+	}
+
 	return 0, nil
 }
 
